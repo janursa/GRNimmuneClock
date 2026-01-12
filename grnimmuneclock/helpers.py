@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 import anndata as ad
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 from scipy.sparse import issparse
 from scipy.stats import spearmanr
 from sklearn.metrics import r2_score
+import joblib
 
 
 def format_data(
@@ -25,7 +26,7 @@ def format_data(
     """
     Format and merge datasets for training or evaluation.
     
-    This function maintains compatibility with the ciim.src.clock.helper.format_data
+    This function maintains compatibility with the hiara.src.clock.helper.format_data
     function while using the GRNimmuneClock package infrastructure.
     
     Parameters
@@ -47,8 +48,8 @@ def format_data(
         Merged and formatted data
     """
     try:
-        from ciim.src.utils.util import retrieve_adata, retrieve_net_consensus
-        from ciim.src.common import datasets_all
+        from hiara.src.utils.util import retrieve_adata, retrieve_net_consensus
+        from hiara.src.common import datasets_all
     except ImportError:
         raise ImportError("ciim package required for format_data function")
     
@@ -96,107 +97,72 @@ def format_data(
 def predict_age(
     adata: ad.AnnData,
     cell_type: str,
-    feature_type: str = 'gene_expression',
-    data_type: str = 'bulk',
-    reg_type: str = 'ridge',
-    version: str = 'all_data'
+    use_local_clocks: bool = False,
 ) -> ad.AnnData:
     """
     Predict age using a trained aging clock.
     
-    This function maintains compatibility with ciim.src.clock.helper.predict_age
-    by wrapping the GRNimmuneClock AgingClock class.
-    
-    Parameters
-    ----------
-    adata : AnnData
-        Input data with gene expression
-    cell_type : str
-        Cell type for prediction
-    feature_type : str, optional
-        Feature type (default: 'gene_expression')
-    data_type : str, optional
-        Data type (default: 'bulk')
-    reg_type : str, optional
-        Regression type (default: 'ridge')
-    version : str, optional
-        Model version (default: 'all_data')
-    
-    Returns
-    -------
-    AnnData
-        Input data with 'predicted_age' column added to .obs
     """
     from grnimmuneclock import AgingClock
     
     # Load aging clock
-    try:
-        # Try to load from ciim clock directory
-        from ciim.src.common import CLOCKS_DIR
-        model_dir = Path(CLOCKS_DIR) / cell_type
-        if model_dir.exists():
-            clock = AgingClock(cell_type=cell_type, model_dir=model_dir)
-        else:
-            # Fall back to package models
-            clock = AgingClock(cell_type=cell_type)
-    except ImportError:
-        # Use package models
-        clock = AgingClock(cell_type=cell_type)
+    clock = AgingClock(cell_type=cell_type, use_local_clocks=use_local_clocks)
     
     # Predict
     adata = clock.predict(adata)
     
     return adata
+# Save model if output_dir provided
+def save_function(model, feature_names, cell_type, output_dir, reg_type, version):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save model
+    model_path = output_dir / cell_type / f"model_{reg_type}_{version}.pkl"
+    (output_dir / cell_type).mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, model_path)
 
+    features_path = output_dir / cell_type / f"feature_names_{reg_type}_{version}.txt"
+    np.savetxt(features_path, feature_names, fmt='%s')
 
 def retrieve_function(
-    reg_type: str,
-    cell_type: str,
-    data_type: str,
-    feature_type: str,
-    version: str
+    cell_type: str, 
+    reg_type: str = 'ridge',
+    use_local_clocks: bool = False
 ):
     """
     Retrieve a trained model and feature names.
     
-    Maintains compatibility with ciim.src.clock.helper.retrieve_function
     
-    Parameters
-    ----------
-    reg_type : str
-        Regression type
-    cell_type : str
-        Cell type
-    data_type : str
-        Data type
-    feature_type : str
-        Feature type
-    version : str
-        Model version
-    
-    Returns
-    -------
-    tuple
-        (model, gene_names)
     """
-    import joblib
-    
-    try:
-        from ciim.src.common import CLOCKS_DIR
-        model_path = Path(CLOCKS_DIR) / f"{cell_type}_{data_type}_{feature_type}_{reg_type}_{version}_model.pkl"
-        features_path = Path(CLOCKS_DIR) / f"feature_names_{cell_type}_{data_type}_{feature_type}_{version}.txt"
-        
-        if model_path.exists() and features_path.exists():
+    if use_local_clocks:
+        from hiara import CLOCKS_DIR
+        output_dir = CLOCKS_DIR
+    else:
+        from grnimmuneclock import __version__
+        output_dir = Path(__file__).parent / 'data' / 'models'
+        version = __version__
+        raise NotImplementedError("Non-local clocks not implemented in this function yet.")
+    if use_local_clocks:
+        from hiara import CLOCKS_DIR, clock_version
+        output_dir = CLOCKS_DIR
+        version = clock_version
+        if reg_type == 'NN':
+            from hiara.src.clock.NN.helper import save_path_train
+            import cpa
+            model = cpa.CPA.load(dir_path=save_path_train)
+            gene_names = model.adata.var_names
+        else:
+            model_path = Path(output_dir) / f"{cell_type}/" / f"model_{reg_type}_{version}.pkl"
+            features_path = Path(output_dir) / f"{cell_type}/" / f"feature_names_{reg_type}_{version}.txt"
             model = joblib.load(model_path)
             gene_names = np.loadtxt(features_path, dtype=str)
-            return model, gene_names
-    except ImportError:
-        pass
-    
-    # Fall back to package models
-    from grnimmuneclock import AgingClock
-    clock = AgingClock(cell_type=cell_type)
-    return clock.model, clock.feature_names
+        return model, gene_names
+
+    else:
+        from grnimmuneclock import AgingClock
+        clock = AgingClock(cell_type=cell_type)
+        return clock.model, clock.feature_names
 
 
 def evaluate_groupwise_median(obs: pd.DataFrame) -> dict:
@@ -230,58 +196,6 @@ def evaluate_groupwise_median(obs: pd.DataFrame) -> dict:
     }
     return scores
 
-
-def save_function(
-    model,
-    gene_names: np.ndarray,
-    cell_type: str,
-    data_type: str,
-    feature_type: str,
-    reg_type: str,
-    version: str
-):
-    """
-    Save a trained model and feature names.
-    
-    Maintains compatibility with ciim.src.clock.helper.save_function
-    
-    Parameters
-    ----------
-    model : sklearn.Pipeline
-        Trained model
-    gene_names : array-like
-        Feature names
-    cell_type : str
-        Cell type
-    data_type : str
-        Data type
-    feature_type : str
-        Feature type
-    reg_type : str
-        Regression type
-    version : str
-        Model version
-    """
-    import joblib
-    
-    try:
-        from ciim.src.common import CLOCKS_DIR
-        output_dir = Path(CLOCKS_DIR)
-    except ImportError:
-        output_dir = Path.cwd() / "models"
-    
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    model_path = output_dir / f"{cell_type}_{data_type}_{feature_type}_{reg_type}_{version}_model.pkl"
-    features_path = output_dir / f"feature_names_{cell_type}_{data_type}_{feature_type}_{version}.txt"
-    
-    joblib.dump(model, model_path)
-    np.savetxt(features_path, gene_names, fmt='%s')
-    
-    print(f"Model saved to {model_path}")
-    print(f"Features saved to {features_path}")
-
-
 def merge_adata(
     datasets: List[str],
     feature_type: str,
@@ -292,7 +206,7 @@ def merge_adata(
     """
     Merge multiple datasets for training.
     
-    Maintains compatibility with ciim.src.clock.helper.merge_adata
+    Maintains compatibility with hiara.src.clock.helper.merge_adata
     
     Parameters
     ----------
@@ -313,8 +227,8 @@ def merge_adata(
         Merged data
     """
     try:
-        from ciim.src.common import SAVE_DIR
-        save_dir = Path(SAVE_DIR)
+        from hiara.src.common import OUTPUT_DIR
+        save_dir = Path(OUTPUT_DIR)
     except ImportError:
         raise ImportError("ciim package required for merge_adata function")
     

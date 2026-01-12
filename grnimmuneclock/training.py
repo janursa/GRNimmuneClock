@@ -154,7 +154,7 @@ def build_model(
     # Get batch labels for CV
     if 'dataset' not in adata.obs.columns:
         raise ValueError("AnnData must have 'dataset' column in .obs for cross-validation")
-    
+    adata.obs['dataset'] = adata.obs['dataset'].astype('category')
     batch_labels = adata.obs['dataset'].cat.codes.values
     
     # Build model
@@ -188,10 +188,7 @@ def build_model(
 def merge_training_data(
     datasets: List[str],
     cell_type: str,
-    feature_type: str = 'gene_expression',
     data_type: str = 'bulk',
-    save_dir: Optional[Path] = None,
-    age_limit: int = 20,
     main_dataset: str = 'data1'
 ) -> ad.AnnData:
     """
@@ -207,10 +204,6 @@ def merge_training_data(
         Feature type (default: 'gene_expression')
     data_type : str, optional
         Data type (default: 'bulk')
-    save_dir : Path, optional
-        Directory containing processed data
-    age_limit : int, optional
-        Minimum age to include (default: 20)
     main_dataset : str, optional
         Main dataset to use as reference (default: 'data1')
     
@@ -219,27 +212,16 @@ def merge_training_data(
     AnnData
         Merged training data
     """
-    if save_dir is None:
-        # Try to import from ciim package
-        try:
-            from ciim.src.common import SAVE_DIR
-            save_dir = Path(SAVE_DIR)
-        except ImportError:
-            raise ValueError("save_dir must be provided if ciim package is not available")
-    else:
-        save_dir = Path(save_dir)
+    from hiara import retrieve_adata, retrieve_net_consensus
+
     
     adata_list = []
     for dataset in datasets:
-        file_path = save_dir / f"{feature_type}_smoothed" / f"{dataset}_{cell_type}_{data_type}.h5ad"
-        
-        if not file_path.exists():
-            print(f"Warning: {file_path} not found, skipping {dataset}")
-            continue
-        
-        adata = ad.read_h5ad(file_path)
-        adata = adata[adata.obs['age'] >= age_limit].copy()
-        adata = adata[adata.obs['is_control']].copy()
+        adata = retrieve_adata(dataset=dataset, cell_type=cell_type, data_type=data_type)
+        net = retrieve_net_consensus(cell_type=cell_type)
+        common_genes = adata.var_names.intersection(net['target'].unique())
+        adata = adata[:, common_genes].copy()
+        assert adata.n_vars > 0, f"No common genes between {dataset} and network for cell type {cell_type}"
         adata_list.append(adata)
     
     if len(adata_list) == 0:
@@ -249,12 +231,12 @@ def merge_training_data(
     adata_all = ad.concat(adata_list, join='inner', axis=0)
     
     # Order datasets with main_dataset first
-    all_datasets = adata_all.obs['dataset'].unique().tolist()
-    ordered_datasets = [main_dataset] + [d for d in all_datasets if d != main_dataset]
-    adata_all.obs['dataset'] = adata_all.obs['dataset'].astype(
-        pd.CategoricalDtype(categories=ordered_datasets, ordered=True)
-    )
-    
+    if False:
+        all_datasets = adata_all.obs['dataset'].unique().tolist()
+        ordered_datasets = [main_dataset] + [d for d in all_datasets if d != main_dataset]
+        adata_all.obs['dataset'] = adata_all.obs['dataset'].astype(
+            pd.CategoricalDtype(categories=ordered_datasets, ordered=True)
+        )
     print(f"Merged data shape: {adata_all.shape}")
     print(f"Datasets: {adata_all.obs['dataset'].value_counts().to_dict()}")
     
@@ -264,14 +246,12 @@ def merge_training_data(
 def train_aging_clock(
     cell_type: str,
     datasets: List[str],
-    feature_type: str = 'gene_expression',
+    version: str,
+    output_dir: Path,
     data_type: str = 'bulk',
     reg_type: str = 'ridge',
     tune_model: bool = True,
-    age_limit: int = 20,
-    save_dir: Optional[Path] = None,
-    output_dir: Optional[Path] = None,
-    version: str = 'v1.0',
+    
     verbose: bool = True
 ) -> Tuple[Pipeline, np.ndarray, ad.AnnData]:
     """
@@ -293,8 +273,6 @@ def train_aging_clock(
         Whether to tune hyperparameters (default: True)
     age_limit : int, optional
         Minimum age (default: 20)
-    save_dir : Path, optional
-        Input data directory
     output_dir : Path, optional
         Where to save model
     version : str, optional
@@ -307,38 +285,22 @@ def train_aging_clock(
     tuple
         (model, predictions, training_adata)
     """
+    from grnimmuneclock import save_function
     if verbose:
         print(f"Training aging clock for {cell_type}")
         print(f"Datasets: {datasets}")
     
     # Merge data
     adata = merge_training_data(
-        datasets, cell_type, feature_type, data_type, 
-        save_dir, age_limit
+        datasets, cell_type, data_type 
     )
-    
     # Train model
     model, y_pred = build_model(adata, reg_type, tune_model, verbose)
     
     # Add predictions to adata
     adata.obs['predicted_age'] = y_pred
     
-    # Save model if output_dir provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save model
-        model_path = output_dir / f"{cell_type}_{data_type}_{feature_type}_{reg_type}_{version}_model.pkl"
-        joblib.dump(model, model_path)
-        
-        # Save feature names
-        features_path = output_dir / f"feature_names_{cell_type}_{data_type}_{feature_type}_{version}.txt"
-        np.savetxt(features_path, adata.var_names.values, fmt='%s')
-        
-        if verbose:
-            print(f"Model saved to {model_path}")
-            print(f"Features saved to {features_path}")
+    save_function(model=model, feature_names=adata.var_names.values, cell_type=cell_type, output_dir=output_dir, reg_type=reg_type, version=version)
     
     return model, y_pred, adata
 

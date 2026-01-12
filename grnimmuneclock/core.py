@@ -27,10 +27,6 @@ class AgingClock:
     ----------
     cell_type : str
         Cell type for the aging clock. Options: 'CD4T', 'CD8T', 'MONO', 'B', 'NK'
-    version : str, optional
-        Version of the model to load (default: 'all_data')
-    model_dir : str or Path, optional
-        Custom directory containing model files. If None, uses bundled models.
     
     Attributes
     ----------
@@ -55,9 +51,8 @@ class AgingClock:
     
     def __init__(
         self,
-        cell_type: str,
-        version: str = 'all_data',
-        model_dir: Optional[Union[str, Path]] = None
+        cell_type:  str,
+        use_local_clocks: bool = False,
     ):
         if cell_type not in self.SUPPORTED_CELL_TYPES:
             raise ValueError(
@@ -66,61 +61,40 @@ class AgingClock:
             )
         
         self.cell_type = cell_type
-        self.version = version
         self.feature_type = 'gene_expression'
         self.data_type = 'bulk'
         self.reg_type = 'ridge'
-        
-        # Determine model directory
-        if model_dir is None:
-            # Use bundled models
-            package_dir = Path(__file__).parent
-            model_dir = package_dir / 'models' / cell_type
-        else:
-            model_dir = Path(model_dir)
-        
-        if not model_dir.exists():
-            raise FileNotFoundError(f"Model directory not found: {model_dir}")
-        
-        self.model_dir = model_dir
-        
+        self.use_local_clocks = use_local_clocks
         # Load model and metadata
         self._load_model()
-        self._load_metadata()
+        # self._load_metadata()
     
     def _load_model(self):
         """Load the trained model and feature names."""
-        model_path = self.model_dir / "model.pkl"
-        features_path = self.model_dir / "features.txt"
-        
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
-        if not features_path.exists():
-            raise FileNotFoundError(f"Features file not found: {features_path}")
-        
-        # Load model
-        self.model = joblib.load(model_path)
-        
-        # Load feature names
-        self.feature_names = np.loadtxt(features_path, dtype=str)
+        from grnimmuneclock import retrieve_function
+        self.model, self.feature_names = retrieve_function(
+            cell_type=self.cell_type,
+            reg_type=self.reg_type,
+            use_local_clocks=self.use_local_clocks
+        )
     
-    def _load_metadata(self):
-        """Load model metadata if available."""
-        metadata_path = self.model_dir / 'metadata.json'
+    # def _load_metadata(self):
+    #     """Load model metadata if available."""
+    #     metadata_path = self.model_dir / 'metadata.json'
         
-        if metadata_path.exists():
-            with open(metadata_path, 'r') as f:
-                self.metadata = json.load(f)
-        else:
-            # Create basic metadata
-            self.metadata = {
-                'cell_type': self.cell_type,
-                'version': self.version,
-                'feature_type': self.feature_type,
-                'data_type': self.data_type,
-                'reg_type': self.reg_type,
-                'n_features': len(self.feature_names)
-            }
+    #     if metadata_path.exists():
+    #         with open(metadata_path, 'r') as f:
+    #             self.metadata = json.load(f)
+    #     else:
+    #         # Create basic metadata
+    #         self.metadata = {
+    #             'cell_type': self.cell_type,
+    #             'version': self.version,
+    #             'feature_type': self.feature_type,
+    #             'data_type': self.data_type,
+    #             'reg_type': self.reg_type,
+    #             'n_features': len(self.feature_names)
+    #         }
     
     def _align_feature_space(self, adata: AnnData) -> AnnData:
         """
