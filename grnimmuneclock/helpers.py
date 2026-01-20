@@ -140,9 +140,8 @@ def retrieve_function(
         output_dir = CLOCKS_DIR
     else:
         from grnimmuneclock import __version__
-        output_dir = Path(__file__).parent / 'data' / 'models'
+        output_dir = Path(__file__).parent / 'models'
         version = __version__
-        raise NotImplementedError("Non-local clocks not implemented in this function yet.")
     if use_local_clocks:
         from hiara import CLOCKS_DIR, clock_version
         output_dir = CLOCKS_DIR
@@ -160,9 +159,11 @@ def retrieve_function(
         return model, gene_names
 
     else:
-        from grnimmuneclock import AgingClock
-        clock = AgingClock(cell_type=cell_type)
-        return clock.model, clock.feature_names
+        model_path = Path(output_dir) / f"{cell_type}/" / f"model_{version}.pkl"
+        features_path = Path(output_dir) / f"{cell_type}/" / f"feature_names_{version}.txt"
+        model = joblib.load(model_path)
+        gene_names = np.loadtxt(features_path, dtype=str)
+        return model, gene_names
 
 
 def evaluate_groupwise_median(obs: pd.DataFrame) -> dict:

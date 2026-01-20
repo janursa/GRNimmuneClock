@@ -122,7 +122,8 @@ def build_model(
     adata: ad.AnnData,
     reg_type: str = 'ridge',
     tune_model: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
+    scoring: str = 'spearman'
 ) -> Tuple[Pipeline, np.ndarray]:
     """
     Build and train an aging clock model.
@@ -158,11 +159,17 @@ def build_model(
     batch_labels = adata.obs['dataset'].cat.codes.values
     
     # Build model
+    if scoring == 'spearman':
+        scoring_func = make_scorer(spearman_scorer)
+    elif scoring == 'r2':
+        scoring_func = make_scorer(r2_score)
+    else:
+        raise ValueError(f"Unknown scoring method: {scoring}")
     if reg_type == 'ridge':
         if tune_model:
             model = tune_ridge_params(
                 X, y, batch_labels, 
-                scoring=make_scorer(r2_score), 
+                scoring=scoring_func, 
                 verbose=verbose
             )
         else:
@@ -251,6 +258,7 @@ def train_aging_clock(
     data_type: str = 'bulk',
     reg_type: str = 'ridge',
     tune_model: bool = True,
+    scoring: str = 'spearman',
     
     verbose: bool = True
 ) -> Tuple[Pipeline, np.ndarray, ad.AnnData]:
@@ -295,7 +303,7 @@ def train_aging_clock(
         datasets, cell_type, data_type 
     )
     # Train model
-    model, y_pred = build_model(adata, reg_type, tune_model, verbose)
+    model, y_pred = build_model(adata, reg_type, tune_model, verbose, scoring=scoring)
     
     # Add predictions to adata
     adata.obs['predicted_age'] = y_pred
