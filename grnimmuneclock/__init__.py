@@ -31,7 +31,6 @@ from .training import (
 )
 from .helpers import (
     predict_age,
-    format_data,
     retrieve_function,
     save_function,
     merge_adata,
@@ -50,7 +49,6 @@ __all__ = [
     'evaluate_cv_performance',
     'tune_ridge_params',
     'predict_age',
-    'format_data',
     'retrieve_function',
     'save_function',
     'merge_adata',

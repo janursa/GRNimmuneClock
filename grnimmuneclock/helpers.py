@@ -16,82 +16,82 @@ from sklearn.metrics import r2_score
 import joblib
 
 
-def format_data(
-    datasets: List[str],
-    cell_type: Optional[str] = None,
-    data_type: str = 'bulk',
-    only_ctr: bool = False,
-    only_targets: bool = False
-) -> ad.AnnData:
-    """
-    Format and merge datasets for training or evaluation.
+# def format_data(
+#     datasets: List[str],
+#     cell_type: Optional[str] = None,
+#     data_type: str = 'bulk',
+#     only_ctr: bool = False,
+#     only_targets: bool = False
+# ) -> ad.AnnData:
+#     """
+#     Format and merge datasets for training or evaluation.
     
-    This function maintains compatibility with the hiara.src.clock.helper.format_data
-    function while using the GRNimmuneClock package infrastructure.
+#     This function maintains compatibility with the hiara.src.clock.helper.format_data
+#     function while using the GRNimmuneClock package infrastructure.
     
-    Parameters
-    ----------
-    datasets : list of str
-        Dataset names to merge
-    cell_type : str, optional
-        Cell type to filter for
-    data_type : str, optional
-        Data type (default: 'bulk')
-    only_ctr : bool, optional
-        Whether to only include control samples (default: False)
-    only_targets : bool, optional
-        Whether to only include target genes from GRN (default: False)
+#     Parameters
+#     ----------
+#     datasets : list of str
+#         Dataset names to merge
+#     cell_type : str, optional
+#         Cell type to filter for
+#     data_type : str, optional
+#         Data type (default: 'bulk')
+#     only_ctr : bool, optional
+#         Whether to only include control samples (default: False)
+#     only_targets : bool, optional
+#         Whether to only include target genes from GRN (default: False)
     
-    Returns
-    -------
-    AnnData
-        Merged and formatted data
-    """
-    try:
-        from hiara.src.utils.util import retrieve_adata, retrieve_net_consensus
-        from hiara.src.common import datasets_all
-    except ImportError:
-        raise ImportError("ciim package required for format_data function")
+#     Returns
+#     -------
+#     AnnData
+#         Merged and formatted data
+#     """
+#     try:
+#         from hiara.src.utils.util import retrieve_adata, retrieve_net_consensus
+#         from hiara.src.common import datasets_all
+#     except ImportError:
+#         raise ImportError("ciim package required for format_data function")
     
-    adata_store = []
-    for d in datasets:
-        adata = retrieve_adata(dataset=d, type=data_type)
-        adata_store.append(adata)
+#     adata_store = []
+#     for d in datasets:
+#         adata = retrieve_adata(dataset=d, type=data_type)
+#         adata_store.append(adata)
 
-    # Concatenate with outer join
-    adata_train = ad.concat(
-        adata_store,
-        axis=0,
-        join='outer',
-        merge='first'
-    )
+#     # Concatenate with outer join
+#     adata_train = ad.concat(
+#         adata_store,
+#         axis=0,
+#         join='outer',
+#         merge='first'
+#     )
 
-    # Restrict to common genes
-    common_genes = set.intersection(*(set(a.var_names) for a in adata_store))
-    adata_train = adata_train[:, list(common_genes)]
+#     # Restrict to common genes
+#     common_genes = set.intersection(*(set(a.var_names) for a in adata_store))
+#     adata_train = adata_train[:, list(common_genes)]
     
-    if cell_type is not None:
-        adata_train = adata_train[adata_train.obs['cell_type'] == cell_type, :].copy()
+#     if cell_type is not None:
+#         adata_train = adata_train[adata_train.obs['cell_type'] == cell_type, :].copy()
 
-    adata_train.obs_names_make_unique()
+#     adata_train.obs_names_make_unique()
 
-    if only_ctr:
-        adata_train = adata_train[adata_train.obs['is_control']]
+#     if only_ctr:
+#         adata_train = adata_train[adata_train.obs['is_control']]
     
-    print('Datasets in merged adata:', adata_train.obs['dataset'].unique())
-    print('Cell types in merged adata:', adata_train.obs['cell_type'].unique())
+#     print('Datasets in merged adata:', adata_train.obs['dataset'].unique())
+#     print('Cell types in merged adata:', adata_train.obs['cell_type'].unique())
 
-    for col in adata_train.obs.columns:
-        if adata_train.obs[col].dtype == "object":
-            adata_train.obs[col] = adata_train.obs[col].astype(str)
+#     for col in adata_train.obs.columns:
+#         if adata_train.obs[col].dtype == "object":
+#             adata_train.obs[col] = adata_train.obs[col].astype(str)
 
-    if only_targets:
-        assert cell_type is not None, "cell_type must be specified to filter for target genes"
-        net = retrieve_net_consensus(datasets_all, cell_type, min_degree=3)
-        target_genes = net['target'].unique()
-        adata_train = adata_train[:, adata_train.var_names.isin(target_genes)].copy()
+#     if only_targets:
+#         assert cell_type is not None, "cell_type must be specified to filter for target genes"
+#         net = retrieve_net_consensus(datasets_all, cell_type)
+#         target_genes = net['target'].unique()
+#         adata_train = adata_train[:, adata_train.var_names.isin(target_genes)].copy()
 
-    return adata_train
+#     return adata_train
 
 
 def predict_age(
