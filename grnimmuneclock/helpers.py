@@ -143,9 +143,9 @@ def retrieve_function(
         output_dir = Path(__file__).parent / 'models'
         version = __version__
     if use_local_clocks:
-        from hiara import CLOCKS_DIR, clock_version
+        from hiara import CLOCKS_DIR, CLOCK_V
         output_dir = CLOCKS_DIR
-        version = clock_version
+        version = CLOCK_V
         if reg_type == 'NN':
             from hiara.src.clock.NN.helper import save_path_train
             import cpa
