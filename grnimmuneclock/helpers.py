@@ -98,6 +98,7 @@ def predict_age(
     adata: ad.AnnData,
     cell_type: str,
     use_local_clocks: bool = False,
+    version: Optional[str] = None
 ) -> ad.AnnData:
     """
     Predict age using a trained aging clock.
@@ -106,7 +107,7 @@ def predict_age(
     from grnimmuneclock import AgingClock
     
     # Load aging clock
-    clock = AgingClock(cell_type=cell_type, use_local_clocks=use_local_clocks)
+    clock = AgingClock(cell_type=cell_type, use_local_clocks=use_local_clocks, version=version)
     
     # Predict
     adata = clock.predict(adata)
@@ -128,7 +129,8 @@ def save_function(model, feature_names, cell_type, output_dir, reg_type, version
 def retrieve_function(
     cell_type: str, 
     reg_type: str = 'ridge',
-    use_local_clocks: bool = False
+    use_local_clocks: bool = False,
+    version: Optional[str] = None
 ):
     """
     Retrieve a trained model and feature names.
@@ -145,7 +147,8 @@ def retrieve_function(
     if use_local_clocks:
         from hiara import CLOCKS_DIR, CLOCK_V
         output_dir = CLOCKS_DIR
-        version = CLOCK_V
+        if version is None:
+            version = CLOCK_V
         if reg_type == 'NN':
             from hiara.src.clock.NN.helper import save_path_train
             import cpa
@@ -228,7 +231,7 @@ def merge_adata(
         Merged data
     """
     try:
-        from hiara.src.common import OUTPUT_DIR
+        from hiara import OUTPUT_DIR
         save_dir = Path(OUTPUT_DIR)
     except ImportError:
         raise ImportError("ciim package required for merge_adata function")

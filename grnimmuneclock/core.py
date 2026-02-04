@@ -53,6 +53,7 @@ class AgingClock:
         self,
         cell_type:  str,
         use_local_clocks: bool = False,
+        version: Optional[str] = None
     ):
         if cell_type not in self.SUPPORTED_CELL_TYPES:
             raise ValueError(
@@ -65,6 +66,7 @@ class AgingClock:
         self.data_type = 'bulk'
         self.reg_type = 'ridge'
         self.use_local_clocks = use_local_clocks
+        self.version = version
         # Load model and metadata
         self._load_model()
         # self._load_metadata()
@@ -75,7 +77,8 @@ class AgingClock:
         self.model, self.feature_names = retrieve_function(
             cell_type=self.cell_type,
             reg_type=self.reg_type,
-            use_local_clocks=self.use_local_clocks
+            use_local_clocks=self.use_local_clocks,
+            version=self.version
         )
     
     # def _load_metadata(self):
