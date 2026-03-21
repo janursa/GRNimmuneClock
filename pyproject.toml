@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grnimmuneclock"
-version = "1.0.0"
+version = "1.1.0"
 description = "Cell-type specific aging clocks for immune cells based on gene regulatory networks"
-authors = [{name = "Jalil Nourisa", email = "jalil.nourisa@example.com"}]
+authors = [{name = "Jalil Nourisa", email = "jalil.nourisa@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.8"
 keywords = ["aging", "immune cells", "gene regulatory networks", "aging clock", "bioinformatics"]

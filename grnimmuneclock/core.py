@@ -10,7 +10,6 @@ from typing import Optional, Union, List
 import numpy as np
 import pandas as pd
 import joblib
-from scipy import sparse
 from scipy.sparse import issparse
 import anndata as ad
 from anndata import AnnData
@@ -47,12 +46,11 @@ class AgingClock:
     >>> print(adata_predicted.obs['predicted_age'])
     """
     
-    SUPPORTED_CELL_TYPES = ['CD4T', 'CD8T', 'MONO', 'B', 'NK']
+    SUPPORTED_CELL_TYPES = ['CD4T', 'CD8T']
     
     def __init__(
         self,
         cell_type:  str,
-        use_local_clocks: bool = False,
         version: Optional[str] = None
     ):
         if cell_type not in self.SUPPORTED_CELL_TYPES:
@@ -65,19 +63,14 @@ class AgingClock:
         self.feature_type = 'gene_expression'
         self.data_type = 'bulk'
         self.reg_type = 'ridge'
-        self.use_local_clocks = use_local_clocks
         self.version = version
-        # Load model and metadata
         self._load_model()
-        # self._load_metadata()
     
     def _load_model(self):
         """Load the trained model and feature names."""
         from grnimmuneclock import retrieve_function
         self.model, self.feature_names = retrieve_function(
             cell_type=self.cell_type,
-            reg_type=self.reg_type,
-            use_local_clocks=self.use_local_clocks,
             version=self.version
         )
     
@@ -102,55 +95,33 @@ class AgingClock:
     def _align_feature_space(self, adata: AnnData) -> AnnData:
         """
         Align input data features to match the model's feature space.
-        
-        Missing features will be filled with zeros.
-        
-        Parameters
-        ----------
-        adata : AnnData
-            Input data with gene expression
-        
-        Returns
-        -------
-        AnnData
-            Data with aligned features
+        Missing features are filled with zeros.
         """
-        var_names = np.array(adata.var.index.tolist())
-        var_index = {gene: i for i, gene in enumerate(var_names)}
-        
-        # Collect indices or mark as -1 for missing
+        var_index = {gene: i for i, gene in enumerate(adata.var_names)}
         idxs = np.array([var_index.get(gene, -1) for gene in self.feature_names])
-        
-        # Create a matrix with correct shape
-        rows = adata.obs.shape[0]
-        cols = len(self.feature_names)
-        X_aligned = sparse.lil_matrix((rows, cols))
-        
-        # Fill in available gene columns
         present = idxs != -1
-        if present.sum() > 0:
-            X_aligned[:, present] = adata[:].X[:, idxs[present]]
-        
-        # Convert to CSR for efficiency
-        X_aligned = X_aligned.tocsr()
-        
-        # Create new AnnData object
-        new_adata = AnnData(
-            X=X_aligned,
-            obs=adata.obs.copy(),
-            var={"gene_symbols": self.feature_names},
-        )
-        new_adata.var_names = self.feature_names
-        
-        # Warn about missing features
+
         n_missing = (~present).sum()
         if n_missing > 0:
             coverage = present.sum() / len(self.feature_names)
             warnings.warn(
                 f"{n_missing} features ({(1-coverage)*100:.1f}%) missing from input data. "
-                f"They will be set to zero."
+                "They will be set to zero."
             )
-        
+
+        # Build aligned matrix in numpy (faster than sparse for typical n_obs < 1000)
+        X_src = adata.X
+        if issparse(X_src):
+            X_src = X_src.toarray()
+        elif not isinstance(X_src, np.ndarray):
+            X_src = np.array(X_src)
+
+        X_aligned = np.zeros((adata.n_obs, len(self.feature_names)), dtype=np.float32)
+        if present.sum() > 0:
+            X_aligned[:, present] = X_src[:, idxs[present]]
+
+        new_adata = AnnData(X=X_aligned, obs=adata.obs.copy())
+        new_adata.var_names = self.feature_names
         return new_adata
     
     def _validate_input(self, adata: AnnData):
@@ -263,9 +234,11 @@ class AgingClock:
             return predictions
     
     def __repr__(self):
+        from grnimmuneclock.__version__ import MODEL_VERSION
+        resolved = self.version if self.version is not None else MODEL_VERSION
         return (
             f"AgingClock(cell_type='{self.cell_type}', "
-            f"version='{self.version}', "
+            f"version='{resolved}', "
             f"n_features={len(self.feature_names)})"
         )
     

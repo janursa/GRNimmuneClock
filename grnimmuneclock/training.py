@@ -192,124 +192,68 @@ def build_model(
     return model, y_pred
 
 
-def merge_training_data(
-    datasets: List[str],
-    cell_type: str,
-    data_type: str = 'bulk',
-    main_dataset: str = 'data1'
-) -> ad.AnnData:
-    """
-    Merge multiple datasets for training.
-    
-    Parameters
-    ----------
-    datasets : list of str
-        Dataset names to merge
-    cell_type : str
-        Cell type to train on
-    feature_type : str, optional
-        Feature type (default: 'gene_expression')
-    data_type : str, optional
-        Data type (default: 'bulk')
-    main_dataset : str, optional
-        Main dataset to use as reference (default: 'data1')
-    
-    Returns
-    -------
-    AnnData
-        Merged training data
-    """
-    from hiara import retrieve_adata, retrieve_net_consensus
-
-    
-    adata_list = []
-    for dataset in datasets:
-        adata = retrieve_adata(dataset=dataset, cell_type=cell_type, data_type=data_type)
-        net = retrieve_net_consensus(cell_type=cell_type)
-        common_genes = adata.var_names.intersection(net['target'].unique())
-        adata = adata[:, common_genes].copy()
-        assert adata.n_vars > 0, f"No common genes between {dataset} and network for cell type {cell_type}"
-        adata_list.append(adata)
-    
-    if len(adata_list) == 0:
-        raise ValueError("No datasets found for training")
-    
-    # Concatenate
-    adata_all = ad.concat(adata_list, join='inner', axis=0)
-    
-    # Order datasets with main_dataset first
-    if False:
-        all_datasets = adata_all.obs['dataset'].unique().tolist()
-        ordered_datasets = [main_dataset] + [d for d in all_datasets if d != main_dataset]
-        adata_all.obs['dataset'] = adata_all.obs['dataset'].astype(
-            pd.CategoricalDtype(categories=ordered_datasets, ordered=True)
-        )
-    print(f"Merged data shape: {adata_all.shape}")
-    print(f"Datasets: {adata_all.obs['dataset'].value_counts().to_dict()}")
-    
-    return adata_all
-
-
 def train_aging_clock(
+    adata: ad.AnnData,
     cell_type: str,
-    datasets: List[str],
     version: str,
-    output_dir: Path,
-    data_type: str = 'bulk',
+    output_dir: Optional[Path] = None,
     reg_type: str = 'ridge',
     tune_model: bool = True,
     scoring: str = 'spearman',
-    
     verbose: bool = True
 ) -> Tuple[Pipeline, np.ndarray, ad.AnnData]:
     """
     Complete pipeline to train an aging clock.
-    
+
     Parameters
     ----------
+    adata : AnnData
+        Training data with gene expression in .X, age in .obs['age'],
+        and dataset label in .obs['dataset'] (used for cross-validation).
     cell_type : str
-        Cell type to train on
-    datasets : list of str
-        Dataset names for training
-    feature_type : str, optional
-        Feature type (default: 'gene_expression')
-    data_type : str, optional
-        Data type (default: 'bulk')
-    reg_type : str, optional
-        Regression type (default: 'ridge')
-    tune_model : bool, optional
-        Whether to tune hyperparameters (default: True)
-    age_limit : int, optional
-        Minimum age (default: 20)
+        Cell type to train on (used for saving the model).
+    version : str
+        Model version string (e.g. 'V1'). Used in the saved filename.
     output_dir : Path, optional
-        Where to save model
-    version : str, optional
-        Model version (default: 'v1.0')
+        Directory to save the trained model. Defaults to the package's
+        bundled models directory (grnimmuneclock/models/), so re-training
+        overrides the published model in-place.
+    reg_type : str, optional
+        Regression type (default: 'ridge').
+    tune_model : bool, optional
+        Whether to tune hyperparameters with Optuna (default: True).
+    scoring : str, optional
+        CV scoring metric: 'spearman' or 'r2' (default: 'spearman').
     verbose : bool, optional
-        Print progress (default: True)
-    
+        Print progress (default: True).
+
     Returns
     -------
     tuple
         (model, predictions, training_adata)
     """
     from grnimmuneclock import save_function
+
+    if output_dir is None:
+        output_dir = Path(__file__).parent / 'models'
+
     if verbose:
         print(f"Training aging clock for {cell_type}")
-        print(f"Datasets: {datasets}")
-    
-    # Merge data
-    adata = merge_training_data(
-        datasets, cell_type, data_type 
-    )
-    # Train model
+        print(f"Data shape: {adata.shape}")
+        print(f"Datasets: {adata.obs['dataset'].value_counts().to_dict()}")
+
     model, y_pred = build_model(adata, reg_type, tune_model, verbose, scoring=scoring)
-    
-    # Add predictions to adata
+
     adata.obs['predicted_age'] = y_pred
-    
-    save_function(model=model, feature_names=adata.var_names.values, cell_type=cell_type, output_dir=output_dir, reg_type=reg_type, version=version)
-    
+
+    save_function(
+        model=model,
+        feature_names=adata.var_names.values,
+        cell_type=cell_type,
+        output_dir=output_dir,
+        version=version
+    )
+
     return model, y_pred, adata
 
 

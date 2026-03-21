@@ -97,76 +97,52 @@ import joblib
 def predict_age(
     adata: ad.AnnData,
     cell_type: str,
-    use_local_clocks: bool = False,
     version: Optional[str] = None
 ) -> ad.AnnData:
     """
     Predict age using a trained aging clock.
-    
     """
     from grnimmuneclock import AgingClock
-    
-    # Load aging clock
-    clock = AgingClock(cell_type=cell_type, use_local_clocks=use_local_clocks, version=version)
-    
-    # Predict
+
+    clock = AgingClock(cell_type=cell_type, version=version)
     adata = clock.predict(adata)
-    
+
     return adata
-# Save model if output_dir provided
-def save_function(model, feature_names, cell_type, output_dir, reg_type, version):
+def save_function(model, feature_names, cell_type, output_dir, version):
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Save model
-    model_path = output_dir / cell_type / f"model_{reg_type}_{version}.pkl"
-    (output_dir / cell_type).mkdir(parents=True, exist_ok=True)
+    cell_dir = output_dir / cell_type
+    cell_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = cell_dir / f"model_{version}.pkl"
     joblib.dump(model, model_path)
 
-    features_path = output_dir / cell_type / f"feature_names_{reg_type}_{version}.txt"
+    features_path = cell_dir / f"feature_names_{version}.txt"
     np.savetxt(features_path, feature_names, fmt='%s')
 
+
 def retrieve_function(
-    cell_type: str, 
-    reg_type: str = 'ridge',
-    use_local_clocks: bool = False,
-    version: Optional[str] = None
+    cell_type: str,
+    version: Optional[str] = None,
+    model_dir: Optional[Path] = None,
 ):
     """
-    Retrieve a trained model and feature names.
-    
-    
+    Load the trained model and feature names from the package's bundled models directory.
+    Training always saves here, so this is the single source of truth.
+    An explicit model_dir can be passed (used in tests or custom workflows).
     """
-    if use_local_clocks:
-        from hiara import CLOCKS_DIR
-        output_dir = CLOCKS_DIR
+    from grnimmuneclock.__version__ import MODEL_VERSION
+    if model_dir is None:
+        model_dir = Path(__file__).parent / 'models'
     else:
-        from grnimmuneclock import __version__
-        output_dir = Path(__file__).parent / 'models'
-        version = __version__
-    if use_local_clocks:
-        from hiara import CLOCKS_DIR, CLOCK_V
-        output_dir = CLOCKS_DIR
-        if version is None:
-            version = CLOCK_V
-        if reg_type == 'NN':
-            from hiara.src.clock.NN.helper import save_path_train
-            import cpa
-            model = cpa.CPA.load(dir_path=save_path_train)
-            gene_names = model.adata.var_names
-        else:
-            model_path = Path(output_dir) / f"{cell_type}/" / f"model_{reg_type}_{version}.pkl"
-            features_path = Path(output_dir) / f"{cell_type}/" / f"feature_names_{reg_type}_{version}.txt"
-            model = joblib.load(model_path)
-            gene_names = np.loadtxt(features_path, dtype=str)
-        return model, gene_names
+        model_dir = Path(model_dir)
+    if version is None:
+        version = MODEL_VERSION
 
-    else:
-        model_path = Path(output_dir) / f"{cell_type}/" / f"model_{version}.pkl"
-        features_path = Path(output_dir) / f"{cell_type}/" / f"feature_names_{version}.txt"
-        model = joblib.load(model_path)
-        gene_names = np.loadtxt(features_path, dtype=str)
-        return model, gene_names
+    model_path = model_dir / cell_type / f"model_{version}.pkl"
+    features_path = model_dir / cell_type / f"feature_names_{version}.txt"
+    model = joblib.load(model_path)
+    gene_names = np.loadtxt(features_path, dtype=str)
+    return model, gene_names
 
 
 def evaluate_groupwise_median(obs: pd.DataFrame) -> dict:
@@ -200,54 +176,7 @@ def evaluate_groupwise_median(obs: pd.DataFrame) -> dict:
     }
     return scores
 
-def merge_adata(
-    datasets: List[str],
-    feature_type: str,
-    cell_type: str,
-    data_type: str,
-    age_limit: int = 0
-) -> ad.AnnData:
-    """
-    Merge multiple datasets for training.
-    
-    Maintains compatibility with hiara.src.clock.helper.merge_adata
-    
-    Parameters
-    ----------
-    datasets : list of str
-        Dataset names
-    feature_type : str
-        Feature type
-    cell_type : str
-        Cell type
-    data_type : str
-        Data type
-    age_limit : int, optional
-        Minimum age (default: 0)
-    
-    Returns
-    -------
-    AnnData
-        Merged data
-    """
-    try:
-        from hiara import OUTPUT_DIR
-        save_dir = Path(OUTPUT_DIR)
-    except ImportError:
-        raise ImportError("ciim package required for merge_adata function")
-    
-    adata_store = []
-    for dataset in datasets:
-        adata = ad.read_h5ad(
-            save_dir / f"{feature_type}_smoothed" / f"{dataset}_{cell_type}_{data_type}.h5ad"
-        )
-        adata = adata[adata.obs['age'] >= age_limit].copy()
-        adata = adata[adata.obs['is_control']].copy()
-        adata_store.append(adata)
-    
-    adata_all = ad.concat(adata_store, join='inner', axis=0)
-    print(adata_all.obs['dataset'].value_counts())
-    return adata_all
+
 
 
 def prepare_user_data(
@@ -341,8 +270,10 @@ def load_consensus_grn(cell_type: str) -> pd.DataFrame:
     """
     import grnimmuneclock
     
-    if cell_type not in ['CD4T', 'CD8T']:
-        raise ValueError(f"cell_type must be 'CD4T' or 'CD8T', got '{cell_type}'")
+    SUPPORTED_CELL_TYPES = ['CD4T', 'CD8T']
+
+    if cell_type not in SUPPORTED_CELL_TYPES:
+        raise ValueError(f"cell_type must be one of {SUPPORTED_CELL_TYPES}, got '{cell_type}'")
     
     package_dir = Path(grnimmuneclock.__file__).parent
     grn_path = package_dir / 'data' / f'consensus_grn_{cell_type}.csv'
