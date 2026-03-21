@@ -65,7 +65,8 @@ class TestPackageMetadata:
 
     def test_bundled_models_exist(self):
         from pathlib import Path
+        from grnimmuneclock import MODEL_VERSION
         pkg_dir = Path(grnimmuneclock.__file__).parent
         for ct in ['CD4T', 'CD8T']:
-            model_file = pkg_dir / 'models' / ct / f'model_{grnimmuneclock.__version__}.pkl'
+            model_file = pkg_dir / 'models' / ct / f'model_{MODEL_VERSION}.pkl'
             assert model_file.exists(), f"Missing bundled model: {model_file}"
