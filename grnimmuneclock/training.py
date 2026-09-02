@@ -101,7 +101,7 @@ def tune_ridge_params(X, y, cv_groups=None, n_trials=30, scoring='r2', verbose=T
         scores = cross_val_score(model, X, y, cv=cv, scoring=scoring)
         return np.mean(scores)
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
     study.optimize(objective, n_trials=n_trials, show_progress_bar=verbose)
 
     best_alpha = study.best_params['alpha']
