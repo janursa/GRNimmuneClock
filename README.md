@@ -2,14 +2,14 @@
 
 **Cell-Type Specific Aging Clocks for Immune Cells**
 
-GRNimmuneClock provides pre-trained aging clocks for immune cell types, built using gene regulatory network (GRN) analysis. Predict biological age from gene expression data with cell-type specific models trained on multiple cohorts.
+GRNimmuneClock provides pre-trained aging clocks for immune cell types, trained on genes significantly associated with age. Predict biological age from gene expression data with cell-type specific models trained on multiple cohorts. Each clock also ships with a consensus gene regulatory network (GRN) for the same cell type, usable to interpret the clock's genes in terms of transcription factor (TF) activity.
 
 ## Features
 
 - 🔬 **Cell-Type Specific**: Separate models for CD4T and CD8T cells
-- 📊 **High Performance**: Trained on multiple cohorts with Spearman corr > 0.8.
-- 🧬 **GRN-Based**: Uses gene regulatory network-informed features
-- 🔗 **Network Analysis**: Access GRNs for TF-target exploration
+- 🧬 **Age-Associated Features**: Trained on genes significantly correlated with age, not a fixed gene panel
+- 🔗 **Network Analysis**: Access bundled consensus GRNs for TF-target exploration, and score TF activity from a clock's coefficients (`tf_activity_from_coefs`)
+- 🔍 **Interpretation**: Out-of-sample permutation gene importance (`permutation_gene_importance`)
 - 🎨 **Visualization Tools**: Built-in plotting functions for analysis
 - 🚀 **Easy to Use**: Simple Python API
 - 🔧 **Training Pipeline**: Tools to train custom aging clocks
@@ -59,11 +59,13 @@ See the tutorial.ipynb for more.
 
 All models are:
 - **Algorithm**: Ridge regression with StandardScaler
-- **Features**: Gene expression values (target genes from GRN analysis)
+- **Features**: Gene expression values, restricted per cell type to genes significantly associated with age (not a GRN target list)
 - **Training**: Multiple cohorts (European, Korean, Japanese, Chinese)
 - **Age Range**: 20-80 years
 - **Species**: Human
 - **Tissue**: Peripheral blood
+
+Per-model feature counts and held-out performance are in `grnimmuneclock/models/<cell_type>/metadata.json`.
 
 
 ## Citation

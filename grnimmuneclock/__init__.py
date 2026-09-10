@@ -34,7 +34,14 @@ from .helpers import (
     save_function,
     evaluate_groupwise_median,
     load_consensus_grn,
+    load_heldout_data,
+    load_aging_stats,
     prepare_user_data
+)
+from .interpretation import (
+    permutation_gene_importance,
+    tf_activity_from_coefs,
+    regulon_ora,
 )
 
 __all__ = [
@@ -43,10 +50,16 @@ __all__ = [
     'load_example_data',
     'predict_age',
     'load_consensus_grn',
+    'load_heldout_data',
+    'load_aging_stats',
     'prepare_user_data',
     # Training
     'train_aging_clock',
     'evaluate_cv_performance',
+    # Interpretation
+    'permutation_gene_importance',
+    'tf_activity_from_coefs',
+    'regulon_ora',
     # Plotting
     'plotting',
     # Evaluation

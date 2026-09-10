@@ -4,7 +4,6 @@
 
 **Version:** 1.0.0  
 **License:** MIT  
-**Location:** `/Users/jno24/Documents/projs/ongoing/hiara/GRNimmuneClock/`
 
 ---
 

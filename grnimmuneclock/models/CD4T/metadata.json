@@ -1,12 +1,11 @@
 {
   "cell_type": "CD4T",
   "model_type": "Ridge Regression",
-  "training_data": "Multiple aging cohorts",
-  "n_features": 1395,
+  "training_data": "onek1k, abf300",
+  "n_features": 2025,
   "performance": {
-    "r2": 0.87,
-    "mae": 5.2
+    "spearman": 0.843
   },
-  "version": "1.0.0",
-  "trained_date": "2024"
+  "version": "V1",
+  "trained_date": "2026-09-10"
 }

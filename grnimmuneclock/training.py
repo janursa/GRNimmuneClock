@@ -16,7 +16,7 @@ from scipy.sparse import issparse
 from scipy.stats import spearmanr
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.linear_model import Ridge, ElasticNet
+from sklearn.linear_model import Ridge, Lasso, ElasticNet
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, make_scorer
 
@@ -57,65 +57,111 @@ def get_custom_cv(groups, main_code=0):
     return ordered_test_groups, custom_splits
 
 
-def tune_ridge_params(X, y, cv_groups=None, n_trials=30, scoring='r2', verbose=True):
+class _DefaultTrial:
+    """Stand-in for an optuna trial that returns library defaults, for tune_model=False."""
+    _D = {'alpha': 1.0, 'l1_ratio': 0.1, 'max_iter': 100, 'learning_rate': 0.1,
+          'max_leaf_nodes': 31, 'min_samples_leaf': 20, 'l2_regularization': 0.0,
+          'width': 64, 'depth': 2, 'nn_alpha': 1e-4, 'lr_init': 1e-3}
+
+    def suggest_float(self, name, *a, **k):
+        return self._D[name]
+    suggest_int = suggest_categorical = suggest_float
+
+
+def _suggest_model(trial, reg_type):
+    """Search space per model family. Same optuna budget and same CV for all of them,
+    so a model that loses, loses on form and not on tuning effort."""
+    if reg_type == 'ridge':
+        return Pipeline([('standardscaler', StandardScaler()),
+                         ('ridge', Ridge(alpha=trial.suggest_float("alpha", 0.01, 1000.0, log=True),
+                                         random_state=42))])
+    if reg_type == 'lasso':
+        return Pipeline([('standardscaler', StandardScaler()),
+                         ('lasso', Lasso(alpha=trial.suggest_float("alpha", 1e-3, 10.0, log=True),
+                                         max_iter=10000, random_state=42))])
+    if reg_type == 'elasticnet':
+        return Pipeline([('standardscaler', StandardScaler()),
+                         ('elasticnet', ElasticNet(
+                             alpha=trial.suggest_float("alpha", 1e-3, 10.0, log=True),
+                             l1_ratio=trial.suggest_float("l1_ratio", 0.05, 0.95),
+                             max_iter=10000, random_state=42))])
+    if reg_type == 'gradientboosting':
+        # ponytail: HistGradientBoosting, not GradientBoostingRegressor -- same algorithm
+        # family, binned splits, ~100x faster at p=5k so it can afford the same 30 trials.
+        from sklearn.ensemble import HistGradientBoostingRegressor
+        return Pipeline([('standardscaler', StandardScaler()),
+                         ('gb', HistGradientBoostingRegressor(
+                             max_iter=trial.suggest_int("max_iter", 100, 600),
+                             learning_rate=trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+                             max_leaf_nodes=trial.suggest_int("max_leaf_nodes", 7, 63),
+                             min_samples_leaf=trial.suggest_int("min_samples_leaf", 5, 50),
+                             l2_regularization=trial.suggest_float("l2_regularization", 1e-3, 10.0, log=True),
+                             early_stopping=True, validation_fraction=0.15,
+                             n_iter_no_change=20, random_state=42))])
+    if reg_type == 'nn':
+        from sklearn.neural_network import MLPRegressor
+        width = trial.suggest_categorical("width", [32, 64, 128, 256])
+        depth = trial.suggest_int("depth", 1, 3)
+        return Pipeline([('standardscaler', StandardScaler()),
+                         ('nn', MLPRegressor(
+                             hidden_layer_sizes=tuple(max(8, width // 2 ** i) for i in range(depth)),
+                             alpha=trial.suggest_float("nn_alpha", 1e-5, 10.0, log=True),
+                             learning_rate_init=trial.suggest_float("lr_init", 1e-4, 1e-2, log=True),
+                             max_iter=1000, early_stopping=True, n_iter_no_change=20,
+                             random_state=42))])
+    raise ValueError(f"Unknown reg_type: {reg_type}")
+
+
+def tune_params(X, y, cv_groups=None, reg_type='ridge', n_trials=30, scoring='r2', verbose=True):
     """
-    Tune Ridge regression hyperparameters using Optuna.
-    
+    Tune hyperparameters with Optuna, on the leave-one-cohort-out CV defined by cv_groups.
+
     Parameters
     ----------
-    X : array-like
-        Feature matrix
-    y : array-like
-        Target values
-    cv_groups : array-like, optional
-        Group labels for cross-validation
-    n_trials : int, optional
-        Number of optimization trials (default: 30)
-    scoring : str, optional
-        Scoring metric (default: 'r2')
-    verbose : bool, optional
-        Whether to show progress (default: True)
-    
+    X, y : array-like
+        Feature matrix and target ages.
+    cv_groups : array-like
+        Cohort labels; required (defines the CV folds).
+    reg_type : str
+        'ridge', 'lasso', 'elasticnet', 'gradientboosting' or 'nn'.
+    n_trials : int
+        Optimization trials (default: 30). Identical across reg_types by design.
+    scoring : str or callable
+        sklearn scoring (default: 'r2').
+
     Returns
     -------
     Pipeline
-        Trained pipeline with optimal alpha
+        Unfitted pipeline with the best hyperparameters.
     """
     import optuna
-    
+
+    if cv_groups is None:
+        raise ValueError("cv_groups must be provided")
     if not verbose:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
+    _, cv = get_custom_cv(cv_groups)
+
     def objective(trial):
-        alpha = trial.suggest_float("alpha", 0.01, 1000.0, log=True)
-        model = Pipeline([
-            ('standardscaler', StandardScaler()),
-            ('ridge', Ridge(alpha=alpha, random_state=42))
-        ])
-        
-        if cv_groups is not None:
-            _, cv = get_custom_cv(cv_groups)
-        else:
-            raise ValueError("cv_groups must be provided")
-        
-        scores = cross_val_score(model, X, y, cv=cv, scoring=scoring)
-        return np.mean(scores)
+        scores = cross_val_score(_suggest_model(trial, reg_type), X, y, cv=cv, scoring=scoring)
+        # A degenerate fit (constant predictions) makes spearman nan; optuna rejects nan
+        # and would abort the study if every trial did it. Score it as worst instead.
+        return np.nan_to_num(np.mean(scores), nan=-1e9)
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
     study.optimize(objective, n_trials=n_trials, show_progress_bar=verbose)
 
-    best_alpha = study.best_params['alpha']
-    best_score = study.best_value
-
     if verbose:
-        print(f"Best alpha: {best_alpha:.4f}, Best CV score: {best_score:.4f}")
+        print(f"[{reg_type}] best CV score: {study.best_value:.4f}, params: {study.best_params}")
 
-    best_model = Pipeline([
-        ('standardscaler', StandardScaler()),
-        ('ridge', Ridge(alpha=best_alpha, random_state=42))
-    ])
+    return _suggest_model(optuna.trial.FixedTrial(study.best_params), reg_type)
 
-    return best_model
+
+def tune_ridge_params(X, y, cv_groups=None, n_trials=30, scoring='r2', verbose=True):
+    """Backward-compatible alias for `tune_params(..., reg_type='ridge')`."""
+    return tune_params(X, y, cv_groups, reg_type='ridge', n_trials=n_trials,
+                       scoring=scoring, verbose=verbose)
 
 
 def build_model(
@@ -134,7 +180,8 @@ def build_model(
         Training data with gene expression in .X and age in .obs['age']
         Must have 'dataset' column in .obs for cross-validation
     reg_type : str, optional
-        Regression type: 'ridge' or 'elasticnet' (default: 'ridge')
+        'ridge', 'lasso', 'elasticnet', 'gradientboosting' or 'nn'
+        (default: 'ridge'). All of them honour tune_model.
     tune_model : bool, optional
         Whether to tune hyperparameters (default: True)
     verbose : bool, optional
@@ -165,26 +212,13 @@ def build_model(
         scoring_func = make_scorer(r2_score)
     else:
         raise ValueError(f"Unknown scoring method: {scoring}")
-    if reg_type == 'ridge':
-        if tune_model:
-            model = tune_ridge_params(
-                X, y, batch_labels, 
-                scoring=scoring_func, 
-                verbose=verbose
-            )
-        else:
-            model = make_pipeline(
-                StandardScaler(),
-                Ridge(alpha=1.0, random_state=42)
-            )
-    elif reg_type == 'elasticnet':
-        model = make_pipeline(
-            StandardScaler(),
-            ElasticNet(alpha=1.0, l1_ratio=0.1, random_state=42)
-        )
+    if tune_model:
+        model = tune_params(X, y, batch_labels, reg_type=reg_type,
+                            scoring=scoring_func, verbose=verbose)
     else:
-        raise ValueError(f"Unknown reg_type: {reg_type}")
-    
+        # ponytail: untuned path just takes each library's own defaults.
+        model = _suggest_model(_DefaultTrial(), reg_type)
+
     # Fit model
     model.fit(X, y)
     y_pred = model.predict(X)

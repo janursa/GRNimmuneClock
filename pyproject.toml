@@ -4,18 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grnimmuneclock"
-version = "1.1.0"
+version = "1.2.0"
 description = "Cell-type specific aging clocks for immune cells based on gene regulatory networks"
 authors = [{name = "Jalil Nourisa", email = "jalil.nourisa@gmail.com"}]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 keywords = ["aging", "immune cells", "gene regulatory networks", "aging clock", "bioinformatics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -27,12 +26,13 @@ dependencies = [
     "numpy>=1.20.0",
     "pandas>=1.3.0",
     "scikit-learn>=1.0.0",
-    "scipy>=1.7.0",
+    "scipy>=1.11.0",  # scipy.stats.false_discovery_control
     "joblib>=1.0.0",
     "matplotlib>=3.4.0",
     "seaborn>=0.11.0",
     "statsmodels>=0.13.0",
     "optuna>=3.0.0",
+    "decoupler>=2.0.0",  # dc.mt.ulm, used by tf_activity_from_coefs
 ]
 
 [project.optional-dependencies]
@@ -43,6 +43,8 @@ dev = [
     "flake8>=4.0.0",
     "jupyter>=1.0.0",
     "ipykernel>=6.0.0",
+    "nbconvert>=7.0.0",
+    "gseapy>=1.0.0",  # tutorial's pathway-enrichment section
 ]
 
 [project.urls]

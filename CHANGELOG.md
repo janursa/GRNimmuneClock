@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0]
+
+### Added
+- `interpretation` module: `permutation_gene_importance`, `tf_activity_from_coefs`, `regulon_ora`.
+- `load_heldout_data(cell_type)` — held-out validation donors, the data the published permutation-importance analysis runs on.
+- `load_aging_stats(cell_type)` — per-gene empirical aging direction (`pooled_rho`) from the discovery-cohort meta-analysis.
+
+### Changed
+- Bundled consensus GRNs and CD4T/CD8T models retrained on skeleton-pruned GRNs.
+- `requires-python` raised to `>=3.9`; `scipy>=1.11.0` (for `false_discovery_control`); added `decoupler>=2.0.0`.
+
+---
+
 ## [1.1.0]
 
 ### Changed
