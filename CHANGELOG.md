@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0]
+
+### Removed
+- `permutation_gene_importance()` — TF activity is now scored from the ridge coefficients signed by `pooled_rho`, so out-of-sample permutation importance is no longer part of the interpretation path.
+- `load_heldout_data()` and the bundled `heldout_{CD4T,CD8T}.h5ad` — only the permutation analysis used them.
+
+---
+
 ## [1.2.0]
 
 ### Added

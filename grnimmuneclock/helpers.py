@@ -288,29 +288,9 @@ def load_consensus_grn(cell_type: str) -> pd.DataFrame:
     return grn
 
 
-def load_heldout_data(cell_type: str) -> "ad.AnnData":
-    """Held-out validation donors (aida + perez_sle + zhang pseudobulk, healthy only),
-    restricted to the clock's own feature space.
-
-    This is exactly the data the published permutation-importance analysis is run on, so
-    `permutation_gene_importance` reproduces the published t statistics from it.
-
-    Returns
-    -------
-    AnnData with obs['age'] and obs['dataset'].
-    """
-    import anndata as ad
-    import grnimmuneclock
-
-    path = Path(grnimmuneclock.__file__).parent / 'data' / f'heldout_{cell_type}.h5ad'
-    if not path.exists():
-        raise FileNotFoundError(f"Held-out data not found: {path}")
-    return ad.read_h5ad(path)
-
-
 def load_aging_stats(cell_type: str) -> pd.DataFrame:
     """Per-gene empirical aging direction (`pooled_rho`) from the discovery-cohort
-    meta-analysis, indexed by gene. Used to sign permutation importance before ULM.
+    meta-analysis, indexed by gene. Used to sign the clock coefficients before ULM.
     """
     import grnimmuneclock
 

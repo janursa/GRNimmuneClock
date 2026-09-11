@@ -1,28 +1,8 @@
 """Sanity checks for grnimmuneclock.interpretation."""
 import numpy as np
 import pandas as pd
-import pytest
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
-from grnimmuneclock import permutation_gene_importance, tf_activity_from_coefs, regulon_ora
-
-
-def test_permutation_gene_importance_flags_informative_gene():
-    rng = np.random.default_rng(0)
-    n, p = 200, 20
-    X = rng.normal(size=(n, p))
-    y = 3 * X[:, 0] + rng.normal(scale=0.1, size=n)  # only gene 0 carries signal
-
-    model = Pipeline([('standardscaler', StandardScaler()), ('ridge', Ridge(alpha=1.0))])
-    model.fit(X, y)
-
-    padj, tstat, spearman_full = permutation_gene_importance(model, X, y, n_repeats=50, seed=0)
-    assert spearman_full > 0.9
-    assert padj[0] < 0.05
-    assert (padj[1:] > padj[0]).all()
-    assert (tstat[0] > tstat[1:]).all()
+from grnimmuneclock import tf_activity_from_coefs, regulon_ora
 
 
 def test_tf_activity_from_coefs_recovers_driver_tf():
@@ -55,7 +35,6 @@ def test_regulon_ora_recovers_enriched_tf():
 
 
 if __name__ == '__main__':
-    test_permutation_gene_importance_flags_informative_gene()
     test_tf_activity_from_coefs_recovers_driver_tf()
     test_regulon_ora_recovers_enriched_tf()
     print('ok')
