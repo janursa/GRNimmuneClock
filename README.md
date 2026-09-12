@@ -7,10 +7,8 @@ GRNimmuneClock provides pre-trained aging clocks for immune cell types, trained 
 ## Features
 
 - 🔬 **Cell-Type Specific**: Separate models for CD4T and CD8T cells
-- 🧬 **Age-Associated Features**: Trained on genes significantly correlated with age, not a fixed gene panel
-- 🔗 **Network Analysis**: Access bundled consensus GRNs for TF-target exploration, and score TF activity from a clock's coefficients (`tf_activity_from_coefs`)
-- 🔍 **Interpretation**: Regulon overrepresentation among a clock's genes (`regulon_ora`)
-- 🎨 **Visualization Tools**: Built-in plotting functions for analysis
+- 🧬 **Age-Associated Features**: Trained on genes significantly correlated with age
+- 🔗 **Network Analysis**: Access bundled consensus GRNs for TF-target exploration, and score TF activity from a clock's coefficients
 - 🚀 **Easy to Use**: Simple Python API
 - 🔧 **Training Pipeline**: Tools to train custom aging clocks
 
@@ -59,11 +57,9 @@ See the tutorial.ipynb for more.
 
 All models are:
 - **Algorithm**: Ridge regression with StandardScaler
-- **Features**: Gene expression values, restricted per cell type to genes significantly associated with age (not a GRN target list)
-- **Training**: Multiple cohorts (European, Korean, Japanese, Chinese)
-- **Age Range**: 20-80 years
-- **Species**: Human
-- **Tissue**: Peripheral blood
+- **Features**: Gene expression values
+- **Age Range**: ~20-90 years
+- **Species**: Human, PBMC
 
 Per-model feature counts and held-out performance are in `grnimmuneclock/models/<cell_type>/metadata.json`.
 
