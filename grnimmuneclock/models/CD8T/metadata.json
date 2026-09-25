@@ -2,10 +2,10 @@
   "cell_type": "CD8T",
   "model_type": "Ridge Regression",
   "training_data": "onek1k, abf300",
-  "n_features": 2868,
+  "n_features": 2866,
   "performance": {
-    "spearman": 0.748
+    "spearman": 0.752
   },
   "version": "V1",
-  "trained_date": "2026-09-11"
+  "trained_date": "2026-09-23"
 }
